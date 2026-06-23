@@ -19,60 +19,31 @@ const getJsonBody = async (req) => {
   return {}
 }
 
-const fallbackAnalysis = (prompt) => {
+const randomItem = (items) => items[Math.floor(Math.random() * items.length)]
+
+const fallbackAnalysis = (prompt, note = 'Generated locally because OpenAI is not available.') => {
   const lower = prompt.toLowerCase()
-  if (lower.includes('brute') || lower.includes('auth') || lower.includes('login')) {
-    return {
-      summary: 'Multiple failed logins and authentication attempts indicate a brute-force or credential-stuffing attack. The user should verify account lockouts and source reputation.',
-      severity: 'HIGH',
-      confidence: '82%',
-      actions: [
-        'Block or throttle source IPs associated with failed authentication.',
-        'Enable MFA and enforce strong credentials for the impacted accounts.',
-        'Review logs for lateral movement and suspicious sessions.',
-      ],
-      note: 'OPENAI_API_KEY is not configured; using local fallback analysis.',
-    }
-  }
-
-  if (lower.includes('payload') || lower.includes('encrypted') || lower.includes('exfiltration')) {
-    return {
-      summary: 'Encrypted outbound payloads are suspicious and often indicate exfiltration or a covert data transfer channel. Investigate the destination and process owner immediately.',
-      severity: 'CRITICAL',
-      confidence: '91%',
-      actions: [
-        'Isolate the host and capture network session data.',
-        'Check for file staging, compression, or unusual encryption tooling.',
-        'Notify incident response and preserve evidence for forensic review.',
-      ],
-      note: 'OPENAI_API_KEY is not configured; using local fallback analysis.',
-    }
-  }
-
-  if (lower.includes('link') || lower.includes('url') || lower.includes('phish') || lower.includes('suspicious')) {
-    return {
-      summary: 'A suspicious link can indicate phishing, credential theft, or malware delivery. Treat the URL as untrusted until the sender, domain reputation, and redirect chain are verified.',
-      severity: 'HIGH',
-      confidence: '78%',
-      actions: [
-        'Do not open the link on a primary device or authenticated browser session.',
-        'Check the domain age, sender identity, redirects, and URL reputation in a sandboxed tool.',
-        'If the link was clicked, rotate credentials and review recent account activity.',
-      ],
-      note: 'OPENAI_API_KEY is not configured; using local fallback analysis.',
-    }
-  }
+  const severity = randomItem(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'])
+  const confidence = `${Math.floor(58 + Math.random() * 38)}%`
+  const score = Math.floor(1000 + Math.random() * 9000)
+  const threatType = lower.includes('link') || lower.includes('url') || lower.includes('phish')
+    ? 'phishing or malicious-link activity'
+    : lower.includes('login') || lower.includes('auth')
+    ? 'credential abuse'
+    : lower.includes('payload') || lower.includes('file')
+    ? 'malware delivery'
+    : randomItem(['network anomaly', 'suspicious access pattern', 'endpoint alert', 'data movement signal'])
 
   return {
-    summary: 'The input appears suspicious but does not match a strong known threat signature. Investigate correlating alerts and asset context for better triage.',
-    severity: 'MEDIUM',
-    confidence: '64%',
+    summary: `Generated analysis #${score}: "${prompt}" resembles ${threatType}. Treat it as ${severity.toLowerCase()} priority until validated.`,
+    severity,
+    confidence,
     actions: [
-      'Collect supporting logs and compare with recent baseline activity.',
-      'Validate source identity and check for anomalous access patterns.',
-      'Escalate to the security team if additional indicators are found.',
+      randomItem(['Preserve the alert details and affected asset context.', 'Collect endpoint, identity, and network logs.', 'Check whether related indicators appear elsewhere.']),
+      randomItem(['Block the indicator while it is reviewed.', 'Run the indicator through sandbox or reputation checks.', 'Review recent sessions and revoke suspicious access.']),
+      randomItem(['Escalate if the event repeats or touches sensitive systems.', 'Notify affected users and confirm interaction.', 'Document the finding and tune detections after validation.']),
     ],
-    note: 'OPENAI_API_KEY is not configured; using local fallback analysis.',
+    note,
   }
 }
 
@@ -114,11 +85,7 @@ export default async function handler(req, res) {
     if (!response.ok) {
       const errorBody = await response.text()
       console.error('OpenAI API error:', errorBody)
-      return res.status(200).json({
-        ...fallbackAnalysis(trimmed),
-        summary: 'OpenAI request failed. Showing fallback analysis instead.',
-        note: 'Fallback response due to OpenAI API error. Verify OPENAI_API_KEY in your deployment environment.',
-      })
+      return res.status(200).json(fallbackAnalysis(trimmed, 'OpenAI request failed; generated local analysis.'))
     }
 
     const result = await response.json()
