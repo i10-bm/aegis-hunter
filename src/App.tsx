@@ -57,6 +57,7 @@ const defaultAnalysis = {
   severity: 'INFO',
   confidence: 'N/A',
   actions: ['Type a scenario above and click Search to get a structured response.'],
+  note: undefined,
 }
 
 type AnalysisResult = {
@@ -64,6 +65,7 @@ type AnalysisResult = {
   severity: string
   confidence: string
   actions: string[]
+  note?: string
 }
 
 type AnalysisEntry = AnalysisResult & {
@@ -173,12 +175,11 @@ function App() {
         body: JSON.stringify({ prompt }),
       })
 
+      const data = await response.json().catch(() => null)
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        throw new Error(errorData?.error || 'Analysis API request failed')
+        throw new Error(data?.error || 'Analysis API request failed')
       }
 
-      const data = await response.json()
       setAnalysisResult(data)
       const entry: AnalysisEntry = {
         id: Date.now(),
@@ -194,6 +195,7 @@ function App() {
         severity: 'ERROR',
         confidence: 'N/A',
         actions: ['Check your network connection and try again.', 'Use a clear threat description.'],
+        note: 'No backend response could be processed. Verify your deployment environment and API route.',
       })
     } finally {
       setAnalysisLoading(false)
@@ -378,6 +380,12 @@ function App() {
                     </div>
                   ))}
                 </div>
+                {analysisResult.note ? (
+                  <div className="mt-6 rounded-3xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+                    <p className="font-semibold">Backend note</p>
+                    <p className="mt-2 text-zinc-200">{analysisResult.note}</p>
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
