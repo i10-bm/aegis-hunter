@@ -49,6 +49,20 @@ const fallbackAnalysis = (prompt) => {
     }
   }
 
+  if (lower.includes('link') || lower.includes('url') || lower.includes('phish') || lower.includes('suspicious')) {
+    return {
+      summary: 'A suspicious link can indicate phishing, credential theft, or malware delivery. Treat the URL as untrusted until the sender, domain reputation, and redirect chain are verified.',
+      severity: 'HIGH',
+      confidence: '78%',
+      actions: [
+        'Do not open the link on a primary device or authenticated browser session.',
+        'Check the domain age, sender identity, redirects, and URL reputation in a sandboxed tool.',
+        'If the link was clicked, rotate credentials and review recent account activity.',
+      ],
+      note: 'OPENAI_API_KEY is not configured; using local fallback analysis.',
+    }
+  }
+
   return {
     summary: 'The input appears suspicious but does not match a strong known threat signature. Investigate correlating alerts and asset context for better triage.',
     severity: 'MEDIUM',

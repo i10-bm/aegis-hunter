@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename)
 dotenv.config()
 
 const app = express()
-const port = process.env.PORT || 3000
+const port = process.env.PORT || process.env.API_PORT || 3001
 
 app.use(express.json())
 app.use(express.static(path.join(__dirname, 'dist')))
@@ -23,6 +23,21 @@ app.post('/api/analyze', async (req, res) => {
   }
 
   if (!process.env.OPENAI_API_KEY) {
+    const lower = trimmed.toLowerCase()
+    if (lower.includes('link') || lower.includes('url') || lower.includes('phish') || lower.includes('suspicious')) {
+      return res.status(200).json({
+        summary: 'A suspicious link can indicate phishing, credential theft, or malware delivery. Treat the URL as untrusted until the sender, domain reputation, and redirect chain are verified.',
+        severity: 'HIGH',
+        confidence: '78%',
+        actions: [
+          'Do not open the link on a primary device or authenticated browser session.',
+          'Check the domain age, sender identity, redirects, and URL reputation in a sandboxed tool.',
+          'If the link was clicked, rotate credentials and review recent account activity.',
+        ],
+        note: 'OPENAI_API_KEY is not configured; using local fallback analysis.',
+      })
+    }
+
     return res.status(200).json({
       summary: 'Local fallback: no OpenAI API key configured. Enter a detailed event for better results.',
       severity: 'INFO',

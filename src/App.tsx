@@ -49,6 +49,7 @@ const severityOptions = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
 const sampleQueries = [
   'Suspicious outbound data transfer from finance server',
   'Repeated failed login attempts on admin portal',
+  'Suspicious link sent to an employee inbox',
   'Encrypted payload detected in endpoint traffic',
 ]
 
@@ -99,6 +100,15 @@ const deriveMetrics = (input: string) => {
       status: 'Critical Threat',
       trend: '+42% this hour',
       counts: { critical: 14, high: 21, medium: 12, low: 28 },
+    }
+  }
+
+  if (lower.includes('link') || lower.includes('url') || lower.includes('phish') || lower.includes('suspicious')) {
+    return {
+      riskScore: 76,
+      status: 'High Threat',
+      trend: '+31% this hour',
+      counts: { critical: 9, high: 24, medium: 18, low: 40 },
     }
   }
 
@@ -209,6 +219,89 @@ function App() {
 
   const renderSectionContent = () => {
     switch (activeSection) {
+      case 'dashboard':
+        return (
+          <div className="space-y-6">
+            {analysisError ? (
+              <div className="rounded-3xl border border-rose-500/30 bg-rose-500/10 p-5 text-sm text-rose-200">
+                {analysisError}
+              </div>
+            ) : null}
+
+            <div className="grid gap-6 lg:grid-cols-4">
+              <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+                <p className="text-xs uppercase tracking-[0.28em] text-zinc-500">Risk score</p>
+                <p className="mt-4 text-5xl font-semibold text-white">{metrics.riskScore}</p>
+                <p className="mt-3 text-sm text-zinc-400">{metrics.status}</p>
+              </div>
+              <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+                <p className="text-xs uppercase tracking-[0.28em] text-zinc-500">Critical</p>
+                <p className="mt-4 text-4xl font-semibold text-rose-300">{metrics.counts.critical}</p>
+                <p className="mt-3 text-sm text-zinc-400">{metrics.trend}</p>
+              </div>
+              <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+                <p className="text-xs uppercase tracking-[0.28em] text-zinc-500">High</p>
+                <p className="mt-4 text-4xl font-semibold text-orange-300">{metrics.counts.high}</p>
+                <p className="mt-3 text-sm text-zinc-400">Active investigations</p>
+              </div>
+              <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+                <p className="text-xs uppercase tracking-[0.28em] text-zinc-500">Medium</p>
+                <p className="mt-4 text-4xl font-semibold text-amber-300">{metrics.counts.medium}</p>
+                <p className="mt-3 text-sm text-zinc-400">Queued for review</p>
+              </div>
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+              <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.32em] text-zinc-500">Current analysis</p>
+                    <h3 className="mt-3 text-2xl font-semibold text-white">{analysisResult.severity} assessment</h3>
+                  </div>
+                  <div className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-zinc-300">
+                    Confidence <span className="font-semibold text-white">{analysisResult.confidence}</span>
+                  </div>
+                </div>
+                <p className="mt-6 text-sm leading-7 text-zinc-300">{analysisResult.summary}</p>
+                {analysisResult.note ? (
+                  <p className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+                    {analysisResult.note}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+                <p className="text-xs uppercase tracking-[0.32em] text-zinc-500">Response actions</p>
+                <div className="mt-5 space-y-3">
+                  {analysisResult.actions.map((action, index) => (
+                    <div key={index} className="rounded-2xl border border-slate-700 bg-slate-950 p-4 text-sm text-zinc-300">
+                      <p className="font-semibold text-white">Action {index + 1}</p>
+                      <p className="mt-2 leading-6">{action}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+              <p className="text-xs uppercase tracking-[0.32em] text-zinc-500">Quick prompts</p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                {sampleQueries.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => handleQuickPrompt(prompt)}
+                    disabled={analysisLoading}
+                    className="rounded-2xl border border-slate-700 px-4 py-3 text-left text-sm text-zinc-300 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
       case 'incidents':
         return (
           <>
@@ -431,7 +524,7 @@ function App() {
                 <ul className="mt-4 space-y-3 text-sm text-zinc-300">
                   <li>Install dependencies: `npm install`</li>
                   <li>Start app: `npm run dev`</li>
-                  <li>Visit: `http://localhost:5174`</li>
+                  <li>Visit the local URL printed by Vite.</li>
                 </ul>
               </div>
             </div>
