@@ -53,6 +53,7 @@ app.post('/api/analyze', async (req, res) => {
             content: `Analyze this network event and return JSON only: "${trimmed}"`,
           },
         ],
+        response_format: { type: 'json_object' },
         temperature: 0.2,
         max_tokens: 400,
       }),

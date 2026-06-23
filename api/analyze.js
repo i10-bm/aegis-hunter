@@ -3,6 +3,22 @@ const OPENAI_MODEL = 'gpt-4o-mini'
 
 const buildSystemPrompt = () => `You are an autonomous cybersecurity analyst. When given a network event or incident description, return JSON only with the following keys: summary, severity, confidence, actions. Severity should be one of CRITICAL, HIGH, MEDIUM, LOW, INFO, or ERROR. Confidence should be a percent string like 87%. Actions should be an array of concise remediation steps. Do not include any extra text outside the JSON.`
 
+const getJsonBody = async (req) => {
+  if (req.body && typeof req.body === 'object') {
+    return req.body
+  }
+
+  if (typeof req.body === 'string') {
+    return JSON.parse(req.body || '{}')
+  }
+
+  if (typeof req.json === 'function') {
+    return req.json()
+  }
+
+  return {}
+}
+
 const fallbackAnalysis = (prompt) => {
   const lower = prompt.toLowerCase()
   if (lower.includes('brute') || lower.includes('auth') || lower.includes('login')) {
@@ -51,7 +67,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { prompt } = await req.json()
+  const { prompt } = await getJsonBody(req)
   const trimmed = String(prompt || '').trim()
 
   if (!trimmed) {
@@ -75,6 +91,7 @@ export default async function handler(req, res) {
           { role: 'system', content: buildSystemPrompt() },
           { role: 'user', content: `Analyze this network event and return JSON only: "${trimmed}"` },
         ],
+        response_format: { type: 'json_object' },
         temperature: 0.2,
         max_tokens: 400,
       }),
@@ -82,7 +99,12 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errorBody = await response.text()
-      return res.status(response.status).json({ error: `OpenAI API error: ${errorBody}` })
+      console.error('OpenAI API error:', errorBody)
+      return res.status(200).json({
+        ...fallbackAnalysis(trimmed),
+        summary: 'OpenAI request failed. Showing fallback analysis instead.',
+        note: 'Fallback response due to OpenAI API error. Verify OPENAI_API_KEY in your deployment environment.',
+      })
     }
 
     const result = await response.json()
