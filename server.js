@@ -1,0 +1,86 @@
+import express from 'express'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import dotenv from 'dotenv'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+dotenv.config()
+
+const app = express()
+const port = process.env.PORT || 3000
+
+app.use(express.json())
+app.post('/api/analyze', async (req, res) => {
+  const { prompt } = req.body || {}
+  const trimmed = String(prompt || '').trim()
+
+  if (!trimmed) {
+    return res.status(400).json({ error: 'Prompt is required' })
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(200).json({
+      summary: 'Local fallback: no OpenAI API key configured. Enter a detailed event for better results.',
+      severity: 'INFO',
+      confidence: '55%',
+      actions: [
+        'Configure OPENAI_API_KEY in .env or the deployment environment.',
+        'Use a descriptive network event or threat scenario.',
+      ],
+    })
+  }
+
+  try {
+    const openAiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an autonomous cybersecurity analyst. Return JSON only with summary, severity, confidence, and actions.',
+          },
+          {
+            role: 'user',
+            content: `Analyze this network event and return JSON only: "${trimmed}"`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 400,
+      }),
+    })
+
+    if (!openAiResponse.ok) {
+      const errorText = await openAiResponse.text()
+      return res.status(openAiResponse.status).json({ error: errorText })
+    }
+
+    const data = await openAiResponse.json()
+    const content = data?.choices?.[0]?.message?.content || ''
+    let parsed
+    try {
+      parsed = JSON.parse(content)
+    } catch {
+      parsed = JSON.parse(content.trim().replace(/^\uFEFF/, ''))
+    }
+
+    return res.status(200).json({
+      summary: String(parsed.summary || 'No summary'),
+      severity: String(parsed.severity || 'INFO').toUpperCase(),
+      confidence: String(parsed.confidence || 'N/A'),
+      actions: Array.isArray(parsed.actions) ? parsed.actions.map(String) : [],
+    })
+  } catch (error) {
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Server error' })
+  }
+})
+
+app.listen(port, () => {
+  console.log(`API server running at http://localhost:${port}`)
+})

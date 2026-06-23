@@ -38,6 +38,7 @@ git push -u origin main
 ### Option 1: Vercel dashboard
 - Connect your GitHub repository to Vercel.
 - Select the `aegis-hunter` project folder.
+- Add an environment variable named `OPENAI_API_KEY` to the Vercel project settings.
 - Deploy.
 
 ### Option 2: Vercel CLI
@@ -48,4 +49,13 @@ vercel login
 vercel --prod
 ```
 
-The site is a static HTML dashboard that uses Tailwind CSS via CDN, so no additional build step is required.
+Make sure the production deployment has `OPENAI_API_KEY` configured in Vercel.
+
+## OpenAI configuration
+For local development or when deploying functions, set your OpenAI key in a `.env` file or your environment:
+
+```bash
+OPENAI_API_KEY=sk-...
+```
+
+The API route at `api/analyze.js` uses this key to call OpenAI and return structured threat analysis.
