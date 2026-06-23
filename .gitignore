@@ -1,5 +1,8 @@
 # Ignore local OS files
 .DS_Store
 
+# Node modules
+node_modules
+
 # Vercel local files
 .vercel
