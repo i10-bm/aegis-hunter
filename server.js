@@ -12,6 +12,8 @@ const app = express()
 const port = process.env.PORT || 3000
 
 app.use(express.json())
+app.use(express.static(path.join(__dirname, 'dist')))
+
 app.post('/api/analyze', async (req, res) => {
   const { prompt } = req.body || {}
   const trimmed = String(prompt || '').trim()
@@ -79,6 +81,10 @@ app.post('/api/analyze', async (req, res) => {
   } catch (error) {
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Server error' })
   }
+})
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
 app.listen(port, () => {
