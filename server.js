@@ -60,7 +60,18 @@ app.post('/api/analyze', async (req, res) => {
 
     if (!openAiResponse.ok) {
       const errorText = await openAiResponse.text()
-      return res.status(openAiResponse.status).json({ error: errorText })
+      console.error('OpenAI request failed:', errorText)
+      return res.status(200).json({
+        summary: 'OpenAI request failed. Showing fallback analysis instead.',
+        severity: 'INFO',
+        confidence: '55%',
+        actions: [
+          'Verify your OPENAI_API_KEY in Railway environment variables.',
+          'Replace the current key with a valid OpenAI API key.',
+          'Re-deploy the application after updating the key.',
+        ],
+        note: 'Fallback response due to OpenAI error.',
+      })
     }
 
     const data = await openAiResponse.json()
@@ -77,6 +88,7 @@ app.post('/api/analyze', async (req, res) => {
       severity: String(parsed.severity || 'INFO').toUpperCase(),
       confidence: String(parsed.confidence || 'N/A'),
       actions: Array.isArray(parsed.actions) ? parsed.actions.map(String) : [],
+      note: String(parsed.note || ''),
     })
   } catch (error) {
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Server error' })
