@@ -15,13 +15,55 @@ app.use(express.json())
 app.use(express.static(path.join(__dirname, 'dist')))
 
 const randomItem = (items) => items[Math.floor(Math.random() * items.length)]
+const hasUrl = (input) => /https?:\/\/\S+|www\.\S+/i.test(input)
+const scoreInput = (input) => {
+  return input.split('').reduce((score, character, index) => {
+    return (score + character.charCodeAt(0) * (index + 17)) % 9973
+  }, 0)
+}
+const pickByScore = (items, score) => items[score % items.length]
+const getUrlProfile = (input) => {
+  const match = input.match(/(?:https?:\/\/|www\.)\S+/i)
+  if (!match) return null
+
+  const rawUrl = match[0].replace(/[),.;]+$/, '')
+  const normalizedUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`
+
+  try {
+    const parsed = new URL(normalizedUrl)
+    const domain = parsed.hostname.replace(/^www\./, '')
+    const path = parsed.pathname === '/' ? 'root path' : parsed.pathname
+    const queryCount = Array.from(parsed.searchParams.keys()).length
+    const score = scoreInput(`${domain}${parsed.pathname}${parsed.search}`)
+    const signalTypes = [
+      'domain reputation check',
+      'redirect and landing-page review',
+      'credential-harvesting pattern check',
+      'download or payload-delivery check',
+      'brand impersonation review',
+      'tracking-parameter anomaly check',
+    ]
+
+    return {
+      domain,
+      path,
+      queryCount,
+      score,
+      signalType: pickByScore(signalTypes, score),
+    }
+  } catch {
+    return null
+  }
+}
 
 const generateLocalAnalysis = (prompt, note = 'Generated locally because OpenAI is not available.') => {
   const lower = prompt.toLowerCase()
-  const severity = randomItem(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'])
-  const confidence = `${Math.floor(58 + Math.random() * 38)}%`
-  const score = Math.floor(1000 + Math.random() * 9000)
-  const threatType = lower.includes('link') || lower.includes('url') || lower.includes('phish')
+  const urlProfile = getUrlProfile(prompt)
+  const score = urlProfile?.score ?? scoreInput(prompt)
+  const severity = pickByScore(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'], score)
+  const confidence = `${58 + (score % 38)}%`
+  const analysisId = 1000 + (score % 9000)
+  const threatType = hasUrl(prompt) || lower.includes('link') || lower.includes('url') || lower.includes('phish')
     ? 'phishing or malicious-link activity'
     : lower.includes('login') || lower.includes('auth')
     ? 'credential abuse'
@@ -29,15 +71,39 @@ const generateLocalAnalysis = (prompt, note = 'Generated locally because OpenAI 
     ? 'malware delivery'
     : randomItem(['network anomaly', 'suspicious access pattern', 'endpoint alert', 'data movement signal'])
 
+  const summary = urlProfile
+    ? `Generated analysis #${analysisId}: ${urlProfile.domain} on ${urlProfile.path} triggered a ${urlProfile.signalType}. Query parameters found: ${urlProfile.queryCount}. Treat this link as ${severity.toLowerCase()} priority until validated.`
+    : `Generated analysis #${analysisId}: "${prompt}" resembles ${threatType}. Treat it as ${severity.toLowerCase()} priority until validated.`
+
+  const actionGroups = urlProfile
+    ? [
+        [
+          `Capture the final landing page, redirect chain, and DNS details for ${urlProfile.domain}.`,
+          `Check certificate, hosting ASN, and registration age for ${urlProfile.domain}.`,
+          `Compare ${urlProfile.domain} against known brand-impersonation and typo-squatting patterns.`,
+        ],
+        [
+          `Open the URL only in an isolated sandbox and inspect ${urlProfile.path}.`,
+          `Block ${urlProfile.domain} temporarily while reputation and ownership are verified.`,
+          `Review proxy logs for users who visited ${urlProfile.domain}.`,
+        ],
+        [
+          `Escalate if ${urlProfile.domain} requests credentials, downloads files, or redirects repeatedly.`,
+          `Add ${urlProfile.domain} to watchlists and monitor new related paths.`,
+          `Document indicators from ${urlProfile.domain} and tune URL detections after validation.`,
+        ],
+      ]
+    : [
+        ['Preserve the alert details and affected asset context.', 'Collect endpoint, identity, and network logs.', 'Check whether related indicators appear elsewhere.'],
+        ['Block the indicator while it is reviewed.', 'Run the indicator through sandbox or reputation checks.', 'Review recent sessions and revoke suspicious access.'],
+        ['Escalate if the event repeats or touches sensitive systems.', 'Notify affected users and confirm interaction.', 'Document the finding and tune detections after validation.'],
+      ]
+
   return {
-    summary: `Generated analysis #${score}: "${prompt}" resembles ${threatType}. Treat it as ${severity.toLowerCase()} priority until validated.`,
+    summary,
     severity,
     confidence,
-    actions: [
-      randomItem(['Preserve the alert details and affected asset context.', 'Collect endpoint, identity, and network logs.', 'Check whether related indicators appear elsewhere.']),
-      randomItem(['Block the indicator while it is reviewed.', 'Run the indicator through sandbox or reputation checks.', 'Review recent sessions and revoke suspicious access.']),
-      randomItem(['Escalate if the event repeats or touches sensitive systems.', 'Notify affected users and confirm interaction.', 'Document the finding and tune detections after validation.']),
-    ],
+    actions: actionGroups.map((group, index) => pickByScore(group, score + index)),
     note,
   }
 }
@@ -102,7 +168,8 @@ app.post('/api/analyze', async (req, res) => {
       note: String(parsed.note || ''),
     })
   } catch (error) {
-    return res.status(500).json({ error: error instanceof Error ? error.message : 'Server error' })
+    console.error('Analysis request failed:', error)
+    return res.status(200).json(generateLocalAnalysis(trimmed, 'Analysis service was unreachable; generated local analysis.'))
   }
 })
 

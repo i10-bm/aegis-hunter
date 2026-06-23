@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react'
 
 const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { id: 'incidents', label: 'Incidents', icon: 'security' },
-  { id: 'map', label: 'Map', icon: 'public' },
-  { id: 'analysis', label: 'Analysis', icon: 'psychology' },
-  { id: 'settings', label: 'Settings', icon: 'settings' },
+  { id: 'dashboard', label: 'Dashboard', icon: 'DB' },
+  { id: 'incidents', label: 'Incidents', icon: 'IR' },
+  { id: 'map', label: 'Map', icon: 'MP' },
+  { id: 'analysis', label: 'Analysis', icon: 'AI' },
+  { id: 'settings', label: 'Settings', icon: 'ST' },
 ]
 
 const incidents = [
@@ -63,13 +63,59 @@ const defaultAnalysis = {
 
 const randomItem = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)]
 
+const hasUrl = (input: string) => /https?:\/\/\S+|www\.\S+/i.test(input)
+
+const scoreInput = (input: string) => {
+  return input.split('').reduce((score, character, index) => {
+    return (score + character.charCodeAt(0) * (index + 17)) % 9973
+  }, 0)
+}
+
+const pickByScore = <T,>(items: T[], score: number) => items[score % items.length]
+
+const getUrlProfile = (input: string) => {
+  const match = input.match(/(?:https?:\/\/|www\.)\S+/i)
+  if (!match) return null
+
+  const rawUrl = match[0].replace(/[),.;]+$/, '')
+  const normalizedUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`
+
+  try {
+    const parsed = new URL(normalizedUrl)
+    const domain = parsed.hostname.replace(/^www\./, '')
+    const path = parsed.pathname === '/' ? 'root path' : parsed.pathname
+    const queryCount = Array.from(parsed.searchParams.keys()).length
+    const score = scoreInput(`${domain}${parsed.pathname}${parsed.search}`)
+    const signalTypes = [
+      'domain reputation check',
+      'redirect and landing-page review',
+      'credential-harvesting pattern check',
+      'download or payload-delivery check',
+      'brand impersonation review',
+      'tracking-parameter anomaly check',
+    ]
+
+    return {
+      domain,
+      path,
+      queryCount,
+      score,
+      signalType: pickByScore(signalTypes, score),
+    }
+  } catch {
+    return null
+  }
+}
+
 const generateLocalAnalysis = (prompt: string): AnalysisResult => {
+  const urlProfile = getUrlProfile(prompt)
+  const score = urlProfile?.score ?? scoreInput(prompt)
   const severities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
-  const severity = randomItem(severities)
-  const confidence = `${Math.floor(58 + Math.random() * 38)}%`
-  const score = Math.floor(1000 + Math.random() * 9000)
+  const severity = pickByScore(severities, score)
+  const confidence = `${58 + (score % 38)}%`
+  const analysisId = 1000 + (score % 9000)
   const lower = prompt.toLowerCase()
-  const threatType = lower.includes('link') || lower.includes('url') || lower.includes('phish')
+  const threatType = hasUrl(prompt) || lower.includes('link') || lower.includes('url') || lower.includes('phish')
     ? 'phishing or malicious-link activity'
     : lower.includes('login') || lower.includes('auth')
     ? 'credential abuse'
@@ -77,28 +123,74 @@ const generateLocalAnalysis = (prompt: string): AnalysisResult => {
     ? 'malware delivery'
     : randomItem(['network anomaly', 'suspicious access pattern', 'endpoint alert', 'data movement signal'])
 
+  const summary = urlProfile
+    ? `Generated analysis #${analysisId}: ${urlProfile.domain} on ${urlProfile.path} triggered a ${urlProfile.signalType}. Query parameters found: ${urlProfile.queryCount}. Treat this link as ${severity.toLowerCase()} priority until validated.`
+    : `Generated analysis #${analysisId}: "${prompt}" resembles ${threatType}. The event should be reviewed, correlated with recent activity, and treated as ${severity.toLowerCase()} priority until validated.`
+
+  const actionGroups = urlProfile
+    ? [
+        [
+          `Capture the final landing page, redirect chain, and DNS details for ${urlProfile.domain}.`,
+          `Check certificate, hosting ASN, and registration age for ${urlProfile.domain}.`,
+          `Compare ${urlProfile.domain} against known brand-impersonation and typo-squatting patterns.`,
+        ],
+        [
+          `Open the URL only in an isolated sandbox and inspect ${urlProfile.path}.`,
+          `Block ${urlProfile.domain} temporarily while reputation and ownership are verified.`,
+          `Review proxy logs for users who visited ${urlProfile.domain}.`,
+        ],
+        [
+          `Escalate if ${urlProfile.domain} requests credentials, downloads files, or redirects repeatedly.`,
+          `Add ${urlProfile.domain} to watchlists and monitor new related paths.`,
+          `Document indicators from ${urlProfile.domain} and tune URL detections after validation.`,
+        ],
+      ]
+    : [
+        [
+          'Preserve the original alert, URL, headers, and affected asset details.',
+          'Collect endpoint, identity, and network logs around the event time.',
+          'Check whether other users or hosts saw the same indicator.',
+        ],
+        [
+          'Block the indicator temporarily while reputation and ownership are verified.',
+          'Run the indicator through a sandbox or threat-intelligence lookup.',
+          'Review recent sign-ins and revoke suspicious sessions if needed.',
+        ],
+        [
+          'Escalate to incident response if the indicator repeats or touches sensitive systems.',
+          'Notify the impacted user and confirm whether they interacted with the event.',
+          'Document the finding and tune detection rules after validation.',
+        ],
+      ]
+
   return {
-    summary: `Generated analysis #${score}: "${prompt}" resembles ${threatType}. The event should be reviewed, correlated with recent activity, and treated as ${severity.toLowerCase()} priority until validated.`,
+    summary,
     severity,
     confidence,
-    actions: [
-      randomItem([
-        'Preserve the original alert, URL, headers, and affected asset details.',
-        'Collect endpoint, identity, and network logs around the event time.',
-        'Check whether other users or hosts saw the same indicator.',
-      ]),
-      randomItem([
-        'Block the indicator temporarily while reputation and ownership are verified.',
-        'Run the indicator through a sandbox or threat-intelligence lookup.',
-        'Review recent sign-ins and revoke suspicious sessions if needed.',
-      ]),
-      randomItem([
-        'Escalate to incident response if the indicator repeats or touches sensitive systems.',
-        'Notify the impacted user and confirm whether they interacted with the event.',
-        'Document the finding and tune detection rules after validation.',
-      ]),
-    ],
+    actions: actionGroups.map((group, index) => pickByScore(group, score + index)),
     note: 'Generated locally so the dashboard always shows output for non-empty input.',
+  }
+}
+
+const analyzePrompt = async (prompt: string): Promise<AnalysisResult> => {
+  const response = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(String(data.error || 'Analysis request failed.'))
+  }
+
+  return {
+    summary: String(data.summary || 'No summary provided.'),
+    severity: String(data.severity || 'INFO').toUpperCase(),
+    confidence: String(data.confidence || 'N/A'),
+    actions: Array.isArray(data.actions) ? data.actions.map(String) : ['No remediation steps provided.'],
+    note: data.note ? String(data.note) : undefined,
   }
 }
 
@@ -125,6 +217,30 @@ type MetricCounts = {
 
 const deriveMetrics = (input: string) => {
   const lower = input.toLowerCase()
+
+  if (hasUrl(input)) {
+    const score = getUrlProfile(input)?.score ?? scoreInput(input)
+    const riskScore = 35 + (score % 61)
+    const status = riskScore >= 82
+      ? 'Critical URL Risk'
+      : riskScore >= 65
+      ? 'High URL Risk'
+      : riskScore >= 48
+      ? 'URL Under Review'
+      : 'Low URL Signal'
+
+    return {
+      riskScore,
+      status,
+      trend: `+${8 + (score % 37)}% similar URL alerts`,
+      counts: {
+        critical: 2 + (score % 15),
+        high: 8 + ((score >> 1) % 24),
+        medium: 12 + ((score >> 2) % 35),
+        low: 18 + ((score >> 3) % 80),
+      },
+    }
+  }
 
   if (lower.includes('brute') || lower.includes('auth') || lower.includes('login')) {
     return {
@@ -217,18 +333,33 @@ function App() {
     }
 
     setAnalysisError('')
-    setAnalysisLoading(false)
+    setAnalysisLoading(true)
     setMetrics(deriveMetrics(prompt))
 
-    const generated = generateLocalAnalysis(prompt)
-    setAnalysisResult(generated)
-    const entry: AnalysisEntry = {
-      id: Date.now(),
-      query: prompt,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      ...generated,
+    try {
+      const analyzed = await analyzePrompt(prompt)
+      setAnalysisResult(analyzed)
+      const entry: AnalysisEntry = {
+        id: Date.now(),
+        query: prompt,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        ...analyzed,
+      }
+      setAnalysisHistory((history) => [entry, ...history].slice(0, 4))
+    } catch (error) {
+      const generated = generateLocalAnalysis(prompt)
+      setAnalysisError(error instanceof Error ? error.message : 'Analysis request failed.')
+      setAnalysisResult(generated)
+      const entry: AnalysisEntry = {
+        id: Date.now(),
+        query: prompt,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        ...generated,
+      }
+      setAnalysisHistory((history) => [entry, ...history].slice(0, 4))
+    } finally {
+      setAnalysisLoading(false)
     }
-    setAnalysisHistory((history) => [entry, ...history].slice(0, 4))
   }
 
   const handleQuickPrompt = (prompt: string) => {
@@ -578,7 +709,9 @@ function App() {
                   : 'text-zinc-400 hover:bg-white/5 hover:text-white'
               }`}
             >
-              <span className="material-symbols-outlined text-lg">{item.icon}</span>
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-slate-700 bg-slate-950 text-[10px] font-semibold tracking-normal text-zinc-300">
+                {item.icon}
+              </span>
               {item.label}
             </button>
           ))}
@@ -617,26 +750,44 @@ function App() {
                 {activeSection === 'settings' && 'Verify that your local and deployment environment is ready for the AI backend.'}
               </p>
             </div>
-            <div className="w-full max-w-2xl">
-              <div className="relative rounded-full border border-slate-700 bg-slate-950 px-4 py-3 shadow-xl shadow-slate-950/20">
+            <form
+              className="w-full max-w-2xl"
+              onSubmit={(event) => {
+                event.preventDefault()
+                handleAnalyze()
+              }}
+            >
+              <div className="flex flex-col gap-3 rounded-3xl border border-slate-700 bg-slate-950 p-3 shadow-xl shadow-slate-950/20 sm:flex-row sm:items-center">
                 <input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  onKeyDown={(event) => event.key === 'Enter' && handleAnalyze()}
-                  placeholder="Enter network event or alert text..."
-                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-zinc-500"
+                  placeholder="Paste a URL, IP, domain, or event details..."
+                  className="min-h-11 flex-1 rounded-2xl bg-slate-900 px-4 text-sm text-white outline-none placeholder:text-zinc-500"
                 />
-                <button
-                  type="button"
-                  onClick={() => handleAnalyze()}
-                  disabled={analysisLoading}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-zinc-300 px-5 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {analysisLoading ? 'Analyzing' : 'Search'}
-                </button>
+                <div className="grid grid-cols-[1fr_auto] gap-2 sm:flex sm:items-center">
+                  <button
+                    type="submit"
+                    disabled={analysisLoading}
+                    className="min-h-11 rounded-2xl bg-zinc-300 px-5 text-sm font-semibold uppercase tracking-[0.16em] text-slate-950 transition hover:bg-zinc-200"
+                  >
+                    {analysisLoading ? 'Analyzing' : 'Search'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('')
+                      setAnalysisError('')
+                      setAnalysisResult(defaultAnalysis)
+                      setMetrics(deriveMetrics(''))
+                    }}
+                    className="min-h-11 rounded-2xl border border-slate-700 px-4 text-sm font-medium text-zinc-300 transition hover:border-slate-500 hover:text-white"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
               <p className="mt-3 text-sm text-zinc-500">Search updates the incident table and analysis panel. Press Enter or click Search.</p>
-            </div>
+            </form>
           </div>
         </header>
 
