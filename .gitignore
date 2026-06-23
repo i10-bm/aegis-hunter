@@ -1,0 +1,5 @@
+# Ignore local OS files
+.DS_Store
+
+# Vercel local files
+.vercel
